@@ -7,17 +7,17 @@ import {
   polygon,
   sepolia,
 } from 'wagmi/chains';
+import { http } from 'viem';
+
 
 export const config = getDefaultConfig({
-  appName: 'RainbowKit App',
-  projectId: 'YOUR_PROJECT_ID',
-  chains: [
-    mainnet,
-    polygon,
-    optimism,
-    arbitrum,
-    base,
-    ...(process.env.NEXT_PUBLIC_ENABLE_TESTNETS === 'true' ? [sepolia] : []),
-  ],
+  appName: "ZT",
+  projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID!,
+  chains: [sepolia],
+  transports: {
+    [sepolia.id]: http("https://sepolia.infura.io/v3/5cfcd5c2fa38419a867609416a53ecd9"),
+  },
   ssr: true,
 });
+
+export const defaultChainId: number = sepolia.id;
