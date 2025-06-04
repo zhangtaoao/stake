@@ -290,7 +290,7 @@ const Withdraw = () => {
                 mb: 4,
               }}
             >
-              Request to unstake your ETH. There's a 20-minute waiting period before you can withdraw.
+              {`Request to unstake your ETH. There's a 20-minute waiting period before you can withdraw.`}
             </Typography>
 
             <Divider sx={{ mb: 4 }} />
@@ -304,7 +304,7 @@ const Withdraw = () => {
               </Box>
             ) : !hasStakedAmount ? (
               <Alert severity="info" sx={{ mb: 3 }}>
-                You don't have any staked ETH to unstake.
+                {`You don't have any staked ETH to unstake.`}
               </Alert>
             ) : (
               <Box>

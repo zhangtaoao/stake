@@ -22,12 +22,6 @@ const Home = () => {
     address: address,
   });
 
-  useEffect(() => {
-    if (readOnlyContract && address) {
-      getStakedAmount();
-    }
-  }, [readOnlyContract, address]);
-
   /**
    * 获取质押数量
    */
@@ -45,6 +39,12 @@ const Home = () => {
       }
     }
   }, [address, readOnlyContract]);
+
+  useEffect(() => {
+    if (readOnlyContract && address) {
+      getStakedAmount();
+    }
+  }, [readOnlyContract, address, getStakedAmount]);
 
   /**
    * 质押
@@ -286,7 +286,7 @@ const Home = () => {
 
               <Box sx={{ mt: 3, p: 2, backgroundColor: theme.palette.grey[50], borderRadius: 2 }}>
                 <Typography variant="body2" sx={{ color: theme.palette.text.secondary, textAlign: "center" }}>
-                  💡 Tip: You can withdraw your staked ETH anytime, but there's a 20-minute waiting period after unstaking.
+                  💡 {`Tip: You can withdraw your staked ETH anytime, but there's a 20-minute waiting period after unstaking.`}
                 </Typography>
               </Box>
             </Box>
