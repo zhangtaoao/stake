@@ -1,437 +1,490 @@
- "use client";
+"use client";
 
- import { Box, Button, TextField, Typography, Card, CardContent, InputAdornment, Alert, Chip, Divider, useTheme, Stepper, Step, StepLabel } from "@mui/material";
- import { ConnectButton } from "@rainbow-me/rainbowkit";
- import { useCallback, useEffect, useMemo, useState } from "react";
- import { useAccount, useBalance, useWalletClient } from "wagmi";
- import { useStakeContract } from "../../hooks/useContract";
- import { formatEther, parseEther } from "viem";
- import { waitForTransactionReceipt } from "viem/actions";
- import { toast } from "react-toastify";
- import StatsCard from "../../components/StatsCard";
- import { CheckCircle, TrendingDown, AccessTime, Warning } from "@mui/icons-material";
+import { Box, Button, TextField, Typography, Card, CardContent, InputAdornment, Alert, Chip, Divider, useTheme, Stepper, Step, StepLabel } from "@mui/material";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAccount, useBalance } from "wagmi";
+import { toast } from "react-toastify";
+import StatsCard from "../../components/StatsCard";
+import { CheckCircle, TrendingDown, AccessTime, Warning } from "@mui/icons-material";
+import { formatEther, parseEther } from "ethers";
+import { useStakeContractEthers } from "../../hooks/useEthersContract";
 
- export type UserStakeData = {
-   staked: string;
-   withdrawable: string;
-   withdrawPending: string;
- };
+export type UserStakeData = {
+  staked: string;
+  withdrawable: string;
+  withdrawPending: string;
+};
 
- const _userData = {
-   staked: "0",
-   withdrawable: "0",
-   withdrawPending: "0",
- };
+const _userData = {
+  staked: "0",
+  withdrawable: "0",
+  withdrawPending: "0",
+};
 
- const Withdraw = () => {
-   const theme = useTheme();
-   const stakeContract = useStakeContract();
-   const { address, isConnected } = useAccount();
-   const [loading, setLoading] = useState(false);
-   const [withdrawLoading, setWithdrawLoading] = useState(false);
-   const [dataLoading, setDataLoading] = useState(true);
-   const [amount, setAmount] = useState("");
-   const [userData, setUserData] = useState<UserStakeData>(_userData);
-   const { data: walletClient } = useWalletClient();
+const Withdraw = () => {
+  const theme = useTheme();
+  const { address, isConnected } = useAccount();
+  const [loading, setLoading] = useState(false);
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
+  const [amount, setAmount] = useState("");
+  const [userData, setUserData] = useState<UserStakeData>(_userData);
+  const { readOnlyContract, writeableContract } = useStakeContractEthers();
 
-   // 是否可提现
-   const isWithdrawable = useMemo(() => {
-     return Number(userData.withdrawable) > 0 && isConnected;
-   }, [userData, isConnected]);
+  // 是否可提现
+  const isWithdrawable = useMemo(() => {
+    return Number(userData.withdrawable) > 0 && isConnected;
+  }, [userData, isConnected]);
 
-   // 是否有质押金额
-   const hasStakedAmount = useMemo(() => {
-     return Number(userData.staked) > 0;
-   }, [userData.staked]);
+  // 是否有质押金额
+  const hasStakedAmount = useMemo(() => {
+    return Number(userData.staked) > 0;
+  }, [userData.staked]);
 
-   /**
-    * 获取用户质押数据
-    */
-   const getUserStakeData = async () => {
-     if (!stakeContract || !address) return;
+  /**
+   * 获取用户质押数据
+   */
+  const getUserStakeData = useCallback(async () => {
+    if (!readOnlyContract || !address) return;
 
-     try {
-       setDataLoading(true);
-       const staked = await stakeContract.read.stakingBalance([0, address]);
-       //@ts-ignore
-       const [requestAmount, pendingWithdrawAmount] = await stakeContract.read.withdrawAmount([0, address]);
-       const ava = Number(formatEther(pendingWithdrawAmount as bigint));
-       const p = Number(formatEther(requestAmount as bigint));
-       setUserData({
-         staked: formatEther(staked as bigint),
-         withdrawPending: (p - ava).toFixed(4),
-         withdrawable: ava.toString(),
-       });
-     } catch (error) {
-       console.error("Failed to get stake data", error);
-     } finally {
-       setDataLoading(false);
-     }
-   };
+    try {
+      setDataLoading(true);
+      const staked = await readOnlyContract.stakingBalance(0, address);
+      const [requestAmount, pendingWithdrawAmount] = await readOnlyContract.withdrawAmount(0, address);
 
-   useEffect(() => {
-     if (stakeContract && address) {
-       getUserStakeData();
-     }
-   }, [stakeContract, address]);
+      const ava = Number(formatEther(pendingWithdrawAmount));
+      const p = Number(formatEther(requestAmount));
 
-   /**
-    * 提现
-    */
-   const handleWithdraw = async () => {
-     if (!stakeContract || !address || !walletClient) return;
-     try {
-       setWithdrawLoading(true);
-       toast.info("Initiating withdrawal...");
+      setUserData({
+        staked: formatEther(staked),
+        withdrawPending: (p - ava).toFixed(4),
+        withdrawable: ava.toString(),
+      });
+    } catch (error) {
+      console.error("Failed to get stake data", error);
+    } finally {
+      setDataLoading(false);
+    }
+  }, [readOnlyContract, address]);
 
-       const tx = await stakeContract.write.withdraw([0]);
-       toast.info("Transaction submitted, waiting for confirmation...");
+  useEffect(() => {
+    if (readOnlyContract && address) {
+      getUserStakeData();
+    }
+  }, [readOnlyContract, address, getUserStakeData]);
 
-       const res = await waitForTransactionReceipt(walletClient, { hash: tx });
-       console.log(res, "tx");
-       toast.success("Withdrawal successful! 🎉");
-       getUserStakeData();
-     } catch (error: any) {
-       console.error("Failed to withdraw", error);
-       toast.error(error?.shortMessage || "Failed to withdraw");
-     } finally {
-       setWithdrawLoading(false);
-     }
-   };
+  /**
+   * 提现
+   */
+  const handleWithdraw = async () => {
+    if (!writeableContract || !address) return;
 
-   /**
-    * 解质押
-    */
-   const handleUnStake = async () => {
-     if (!stakeContract || !address || !walletClient || !amount) return;
+    try {
+      setWithdrawLoading(true);
+      toast.info("Initiating withdrawal...");
 
-     // 验证输入
-     if (parseFloat(amount) <= 0) {
-       toast.error("Please enter a valid amount");
-       return;
-     }
+      const tx = await writeableContract.withdraw(0);
+      toast.info("Transaction submitted, waiting for confirmation...");
 
-     if (parseFloat(amount) > parseFloat(userData.staked)) {
-       toast.error("Amount cannot be greater than staked balance");
-       return;
-     }
+      const receipt = await tx.wait();
+      console.log(receipt, "tx receipt");
+      toast.success("Withdrawal successful! 🎉");
+      await getUserStakeData();
+    } catch (error: any) {
+      console.error("Failed to withdraw", error);
+      toast.error(error?.reason || error?.message || "Failed to withdraw");
+    } finally {
+      setWithdrawLoading(false);
+    }
+  };
 
-     try {
-       setLoading(true);
-       toast.info("Initiating unstake...");
+  /**
+   * 解质押
+   */
+  const handleUnStake = async () => {
+    if (!writeableContract || !address || !amount) return;
 
-       const tx = await stakeContract.write.unstake([0, parseEther(amount)]);
-       toast.info("Transaction submitted, waiting for confirmation...");
+    // 验证输入
+    if (parseFloat(amount) <= 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
 
-       const res = await waitForTransactionReceipt(walletClient, { hash: tx });
-       console.log(res, "tx");
-       toast.success("Unstake successful! ⏰ 20 minutes waiting period started");
-       getUserStakeData();
-       setAmount(""); // 清空输入框
-     } catch (error: any) {
-       console.error("Failed to unstake", error);
-       toast.error(error?.shortMessage || "Failed to unstake");
-     } finally {
-       setLoading(false);
-     }
-   };
+    if (parseFloat(amount) > parseFloat(userData.staked)) {
+      toast.error("Amount cannot be greater than staked balance");
+      return;
+    }
 
-   const handleMaxUnstake = () => {
-     setAmount(userData.staked);
-   };
+    try {
+      setLoading(true);
+      toast.info("Initiating unstake...");
 
-   const steps = ["Stake ETH", "Request Unstake", "Wait 20 minutes", "Withdraw"];
+      const tx = await writeableContract.unstake(0, parseEther(amount));
+      toast.info("Transaction submitted, waiting for confirmation...");
 
-   const getActiveStep = () => {
-     if (Number(userData.staked) === 0) return 0;
-     if (Number(userData.withdrawPending) === 0 && Number(userData.withdrawable) === 0) return 1;
-     if (Number(userData.withdrawPending) > 0) return 2;
-     if (Number(userData.withdrawable) > 0) return 3;
-     return 1;
-   };
+      const receipt = await tx.wait();
+      console.log(receipt, "tx receipt");
+      toast.success("Unstake successful! ⏰ 20 minutes waiting period started");
+      await getUserStakeData();
+      setAmount(""); // 清空输入框
+    } catch (error: any) {
+      console.error("Failed to unstake", error);
+      toast.error(error?.reason || error?.message || "Failed to unstake");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-   return (
-     <Box
-       sx={{
-         width: "100%",
-         maxWidth: "1000px",
-         mx: "auto",
-       }}
-     >
-       {/* Hero Section */}
-       <Box
-         className="animate-fadeInUp"
-         sx={{
-           textAlign: "center",
-           mb: 6,
-           py: 4,
-         }}
-       >
-         <Typography
-           variant="h1"
-           sx={{
-             mb: 2,
-             fontSize: { xs: "2rem", md: "3rem" },
-           }}
-         >
-           Withdraw Stakes
-         </Typography>
-         <Typography
-           variant="h6"
-           sx={{
-             color: theme.palette.text.secondary,
-             mb: 3,
-             fontSize: { xs: "1rem", md: "1.25rem" },
-           }}
-         >
-           Unstake your ETH and withdraw your earnings
-         </Typography>
+  const handleMaxUnstake = () => {
+    setAmount(userData.staked);
+  };
 
-         {/* Process Steps */}
-         <Card
-           sx={{
-             mb: 4,
-             p: 3,
-             background: "rgba(255, 255, 255, 0.8)",
-             backdropFilter: "blur(10px)",
-           }}
-         >
-           <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-             Withdrawal Process
-           </Typography>
-           <Stepper activeStep={getActiveStep()} sx={{ mb: 2 }}>
-             {steps.map((label) => (
-               <Step key={label}>
-                 <StepLabel>{label}</StepLabel>
-               </Step>
-             ))}
-           </Stepper>
-         </Card>
-       </Box>
+  const steps = ["Stake ETH", "Request Unstake", "Wait 20 minutes", "Withdraw"];
 
-       {/* Stats Cards */}
-       {isConnected && (
-         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr 1fr" }, gap: 3, mb: 4, width: "100%" }} className="animate-fadeInUp">
-           <StatsCard title="Staked Amount" value={`${parseFloat(userData.staked).toFixed(4)} ETH`} subtitle="Total staked balance" icon="staked" color="primary" loading={dataLoading} />
-           <StatsCard title="Available to Withdraw" value={`${parseFloat(userData.withdrawable).toFixed(4)} ETH`} subtitle="Ready for withdrawal" icon="withdrawable" color="success" loading={dataLoading} />
-           <StatsCard title="Pending Withdrawal" value={`${parseFloat(userData.withdrawPending).toFixed(4)} ETH`} subtitle="Waiting period active" icon="pending" color="warning" loading={dataLoading} />
-         </Box>
-       )}
+  const getActiveStep = () => {
+    if (Number(userData.staked) === 0) return 0;
+    if (Number(userData.withdrawPending) === 0 && Number(userData.withdrawable) === 0) return 1;
+    if (Number(userData.withdrawPending) > 0) return 2;
+    if (Number(userData.withdrawable) > 0) return 3;
+    return 1;
+  };
 
-       {!isConnected ? (
-         <Card
-           className="hover-lift animate-fadeInUp"
-           sx={{
-             background: "rgba(255, 255, 255, 0.9)",
-             backdropFilter: "blur(20px)",
-             border: "1px solid rgba(255, 255, 255, 0.2)",
-             borderRadius: "24px",
-           }}
-         >
-           <CardContent sx={{ p: { xs: 3, md: 4 }, textAlign: "center" }}>
-             <Typography variant="h6" sx={{ mb: 3, color: theme.palette.text.secondary }}>
-               Connect your wallet to manage your stakes
-             </Typography>
-             <ConnectButton />
-           </CardContent>
-         </Card>
-       ) : (
-         <Box sx={{ display: "grid", gap: 4 }}>
-           {/* Unstake Section */}
-           <Card
-             className="hover-lift animate-fadeInUp"
-             sx={{
-               background: "rgba(255, 255, 255, 0.9)",
-               backdropFilter: "blur(20px)",
-               border: "1px solid rgba(255, 255, 255, 0.2)",
-               borderRadius: "24px",
-               overflow: "hidden",
-               position: "relative",
-               "&::before": {
-                 content: '""',
-                 position: "absolute",
-                 top: 0,
-                 left: 0,
-                 right: 0,
-                 height: "4px",
-                 background: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)",
-               },
-             }}
-           >
-             <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-               <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-                 <TrendingDown sx={{ color: theme.palette.warning.main, fontSize: "2rem" }} />
-                 <Box>
-                   <Typography variant="h4" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
-                     Unstake ETH
-                   </Typography>
-                   <Typography variant="body1" sx={{ color: theme.palette.text.secondary }}>
-                     Start the withdrawal process for your staked ETH
-                   </Typography>
-                 </Box>
-               </Box>
+  return (
+    <Box
+      sx={{
+        width: "100%",
+        maxWidth: "1000px",
+        mx: "auto",
+      }}
+    >
+      {/* Hero Section */}
+      <Box
+        className="animate-fadeInUp"
+        sx={{
+          textAlign: "center",
+          mb: 6,
+          py: 4,
+        }}
+      >
+        <Typography
+          variant="h1"
+          sx={{
+            mb: 2,
+            fontSize: { xs: "2rem", md: "3rem" },
+          }}
+        >
+          Withdraw Stakes
+        </Typography>
+        <Typography
+          variant="h6"
+          sx={{
+            color: theme.palette.text.secondary,
+            mb: 3,
+            fontSize: { xs: "1rem", md: "1.25rem" },
+          }}
+        >
+          Unstake your ETH and withdraw your earnings
+        </Typography>
 
-               <Divider sx={{ mb: 4 }} />
+        {/* Process Steps */}
+        <Card
+          sx={{
+            mb: 4,
+            p: 3,
+            background: "rgba(255, 255, 255, 0.8)",
+            backdropFilter: "blur(10px)",
+          }}
+        >
+          <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+            Withdrawal Process
+          </Typography>
+          <Stepper activeStep={getActiveStep()} alternativeLabel>
+            {steps.map((label, index) => (
+              <Step key={label}>
+                <StepLabel
+                  StepIconComponent={({ active, completed }) => (
+                    <Box
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: "50%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: completed ? theme.palette.success.main : active ? theme.palette.primary.main : theme.palette.grey[300],
+                        color: "white",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {completed ? <CheckCircle /> : index + 1}
+                    </Box>
+                  )}
+                >
+                  {label}
+                </StepLabel>
+              </Step>
+            ))}
+          </Stepper>
+        </Card>
+      </Box>
 
-               {!hasStakedAmount ? (
-                 <Alert severity="info" sx={{ mb: 3 }}>
-                   You don't have any staked ETH to unstake. Visit the stake page to start staking.
-                 </Alert>
-               ) : (
-                 <Box>
-                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, color: theme.palette.text.primary }}>
-                     Unstake Amount
-                   </Typography>
+      {/* Stats Cards */}
+      {isConnected && (
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" },
+            gap: 3,
+            mb: 4,
+            width: "100%",
+          }}
+          className="animate-fadeInUp"
+        >
+          <StatsCard title="Staked Amount" value={`${parseFloat(userData.staked).toFixed(4)} ETH`} subtitle="Total staked" icon="staked" color="primary" loading={dataLoading} />
+          <StatsCard title="Pending Withdrawal" value={`${parseFloat(userData.withdrawPending).toFixed(4)} ETH`} subtitle="Waiting period" icon="pending" color="warning" loading={dataLoading} />
+          <StatsCard title="Available to Withdraw" value={`${parseFloat(userData.withdrawable).toFixed(4)} ETH`} subtitle="Ready for withdrawal" icon="withdrawable" color="success" loading={dataLoading} />
+        </Box>
+      )}
 
-                   <TextField
-                     fullWidth
-                     value={amount}
-                     onChange={(e) => setAmount(e.target.value)}
-                     label="Amount to unstake"
-                     type="number"
-                     variant="outlined"
-                     placeholder="0.0"
-                     InputProps={{
-                       endAdornment: (
-                         <InputAdornment position="end">
-                           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                             <Button
-                               size="small"
-                               onClick={handleMaxUnstake}
-                               sx={{
-                                 minWidth: "auto",
-                                 px: 2,
-                                 py: 0.5,
-                                 fontSize: "0.75rem",
-                                 fontWeight: 600,
-                               }}
-                             >
-                               MAX
-                             </Button>
-                             <Typography sx={{ fontWeight: 600, color: theme.palette.text.secondary }}>ETH</Typography>
-                           </Box>
-                         </InputAdornment>
-                       ),
-                     }}
-                     sx={{
-                       mb: 3,
-                       "& .MuiOutlinedInput-root": {
-                         fontSize: "1.1rem",
-                         "& input": { py: 2 },
-                       },
-                     }}
-                   />
+      {/* Main Cards */}
+      <Box sx={{ display: "grid", gap: 3 }}>
+        {/* Unstake Card */}
+        <Card
+          className="hover-lift animate-fadeInUp"
+          sx={{
+            background: "rgba(255, 255, 255, 0.9)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
+            borderRadius: "24px",
+            overflow: "hidden",
+            position: "relative",
+            "&::before": {
+              content: '""',
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "4px",
+              background: "linear-gradient(135deg, #f59e0b 0%, #f97316 100%)",
+            },
+          }}
+        >
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+              <TrendingDown sx={{ color: theme.palette.warning.main, fontSize: 32 }} />
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: 600,
+                  color: theme.palette.text.primary,
+                }}
+              >
+                Unstake ETH
+              </Typography>
+            </Box>
+            <Typography
+              variant="body1"
+              sx={{
+                color: theme.palette.text.secondary,
+                mb: 4,
+              }}
+            >
+              Request to unstake your ETH. There's a 20-minute waiting period before you can withdraw.
+            </Typography>
 
-                   {amount && parseFloat(amount) > 0 && (
-                     <Alert severity={parseFloat(amount) > parseFloat(userData.staked) ? "error" : "warning"} sx={{ mb: 3 }} icon={<Warning />}>
-                       {parseFloat(amount) > parseFloat(userData.staked) ? "Amount exceeds your staked balance" : `After unstaking ${amount} ETH, you'll need to wait 20 minutes before withdrawal.`}
-                     </Alert>
-                   )}
+            <Divider sx={{ mb: 4 }} />
 
-                   <Button
-                     fullWidth
-                     variant="contained"
-                     size="large"
-                     onClick={handleUnStake}
-                     disabled={loading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > parseFloat(userData.staked)}
-                     sx={{
-                       py: 2,
-                       fontSize: "1.1rem",
-                       fontWeight: 600,
-                       borderRadius: "16px",
-                       background: "linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)",
-                       "&:hover": {
-                         background: "linear-gradient(135deg, #d97706 0%, #f59e0b 100%)",
-                       },
-                     }}
-                   >
-                     {loading ? "Unstaking..." : "Unstake ETH"}
-                   </Button>
-                 </Box>
-               )}
-             </CardContent>
-           </Card>
+            {!isConnected ? (
+              <Box sx={{ textAlign: "center", py: 4 }}>
+                <Typography variant="h6" sx={{ mb: 3, color: theme.palette.text.secondary }}>
+                  Connect your wallet to unstake
+                </Typography>
+                <ConnectButton />
+              </Box>
+            ) : !hasStakedAmount ? (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                You don't have any staked ETH to unstake.
+              </Alert>
+            ) : (
+              <Box>
+                <Typography
+                  variant="h6"
+                  sx={{
+                    fontWeight: 600,
+                    mb: 3,
+                    color: theme.palette.text.primary,
+                  }}
+                >
+                  Unstake Amount
+                </Typography>
 
-           {/* Withdraw Section */}
-           <Card
-             className="hover-lift animate-fadeInUp"
-             sx={{
-               background: "rgba(255, 255, 255, 0.9)",
-               backdropFilter: "blur(20px)",
-               border: "1px solid rgba(255, 255, 255, 0.2)",
-               borderRadius: "24px",
-               overflow: "hidden",
-               position: "relative",
-               "&::before": {
-                 content: '""',
-                 position: "absolute",
-                 top: 0,
-                 left: 0,
-                 right: 0,
-                 height: "4px",
-                 background: "linear-gradient(135deg, #10b981 0%, #34d399 100%)",
-               },
-             }}
-           >
-             <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-               <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-                 <CheckCircle sx={{ color: theme.palette.success.main, fontSize: "2rem" }} />
-                 <Box>
-                   <Typography variant="h4" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
-                     Withdraw
-                   </Typography>
-                   <Typography variant="body1" sx={{ color: theme.palette.text.secondary }}>
-                     Withdraw your available ETH to your wallet
-                   </Typography>
-                 </Box>
-               </Box>
+                <TextField
+                  fullWidth
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  label="Amount to unstake"
+                  type="number"
+                  variant="outlined"
+                  placeholder="0.0"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Button
+                            size="small"
+                            onClick={handleMaxUnstake}
+                            sx={{
+                              minWidth: "auto",
+                              px: 2,
+                              py: 0.5,
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                            }}
+                          >
+                            MAX
+                          </Button>
+                          <Typography sx={{ fontWeight: 600, color: theme.palette.text.secondary }}>ETH</Typography>
+                        </Box>
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{
+                    mb: 3,
+                    "& .MuiOutlinedInput-root": {
+                      fontSize: "1.1rem",
+                      "& input": {
+                        py: 2,
+                      },
+                    },
+                  }}
+                />
 
-               <Divider sx={{ mb: 4 }} />
+                {amount && parseFloat(amount) > 0 && (
+                  <Alert severity={parseFloat(amount) > parseFloat(userData.staked) ? "error" : "warning"} sx={{ mb: 3 }} icon={<AccessTime />}>
+                    {parseFloat(amount) > parseFloat(userData.staked) ? "Amount exceeds your staked balance" : `You will unstake ${amount} ETH. There's a 20-minute waiting period before withdrawal.`}
+                  </Alert>
+                )}
 
-               <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
-                 <Typography variant="h6" sx={{ fontWeight: 600, color: theme.palette.text.primary }}>
-                   Ready Amount:
-                 </Typography>
-                 <Chip label={`${userData.withdrawable} ETH`} color="success" sx={{ fontWeight: 600, fontSize: "1rem" }} />
-               </Box>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  size="large"
+                  onClick={handleUnStake}
+                  disabled={loading || !amount || parseFloat(amount) <= 0 || !writeableContract}
+                  sx={{
+                    py: 2,
+                    fontSize: "1.1rem",
+                    fontWeight: 600,
+                    borderRadius: "16px",
+                    backgroundColor: theme.palette.warning.main,
+                    "&:hover": {
+                      backgroundColor: theme.palette.warning.dark,
+                    },
+                  }}
+                >
+                  {loading ? "Unstaking..." : "Unstake ETH"}
+                </Button>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
 
-               {Number(userData.withdrawPending) > 0 && (
-                 <Alert severity="info" sx={{ mb: 3 }} icon={<AccessTime />}>
-                   You have {userData.withdrawPending} ETH in the 20-minute waiting period. Check back later to withdraw these funds.
-                 </Alert>
-               )}
+        {/* Withdraw Card */}
+        <Card
+          className="hover-lift animate-fadeInUp"
+          sx={{
+            background: "rgba(255, 255, 255, 0.9)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
+            borderRadius: "24px",
+            overflow: "hidden",
+            position: "relative",
+            "&::before": {
+              content: '""',
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: "4px",
+              background: "linear-gradient(135deg, #10b981 0%, #059669 100%)",
+            },
+          }}
+        >
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+              <CheckCircle sx={{ color: theme.palette.success.main, fontSize: 32 }} />
+              <Typography
+                variant="h4"
+                sx={{
+                  fontWeight: 600,
+                  color: theme.palette.text.primary,
+                }}
+              >
+                Withdraw ETH
+              </Typography>
+            </Box>
+            <Typography
+              variant="body1"
+              sx={{
+                color: theme.palette.text.secondary,
+                mb: 4,
+              }}
+            >
+              Withdraw your ETH that has completed the waiting period.
+            </Typography>
 
-               <Button
-                 fullWidth
-                 variant="contained"
-                 size="large"
-                 disabled={!isWithdrawable}
-                 onClick={handleWithdraw}
-                 sx={{
-                   py: 2,
-                   fontSize: "1.1rem",
-                   fontWeight: 600,
-                   borderRadius: "16px",
-                   background: isWithdrawable ? "linear-gradient(135deg, #10b981 0%, #34d399 100%)" : undefined,
-                   "&:hover": {
-                     background: isWithdrawable ? "linear-gradient(135deg, #059669 0%, #10b981 100%)" : undefined,
-                   },
-                 }}
-               >
-                 {withdrawLoading ? "Withdrawing..." : isWithdrawable ? "Withdraw ETH" : "No funds available"}
-               </Button>
+            <Divider sx={{ mb: 4 }} />
 
-               <Box sx={{ mt: 3, p: 2, backgroundColor: theme.palette.grey[50], borderRadius: 2 }}>
-                 <Typography variant="body2" sx={{ color: theme.palette.text.secondary, textAlign: "center" }}>
-                   💡 Tip: After unstaking, funds require a 20-minute waiting period before they become available for withdrawal.
-                 </Typography>
-               </Box>
-             </CardContent>
-           </Card>
-         </Box>
-       )}
-     </Box>
-   );
- };
+            {!isConnected ? (
+              <Box sx={{ textAlign: "center", py: 4 }}>
+                <Typography variant="h6" sx={{ mb: 3, color: theme.palette.text.secondary }}>
+                  Connect your wallet to withdraw
+                </Typography>
+                <ConnectButton />
+              </Box>
+            ) : !isWithdrawable ? (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                {Number(userData.withdrawPending) > 0 ? "Your unstake request is pending. Please wait for the 20-minute period to complete." : "No ETH available for withdrawal. You need to unstake first."}
+              </Alert>
+            ) : (
+              <Box>
+                <Alert severity="success" sx={{ mb: 3 }} icon={<CheckCircle />}>
+                  You have {userData.withdrawable} ETH ready for withdrawal!
+                </Alert>
 
- export default Withdraw;
+                <Button
+                  fullWidth
+                  variant="contained"
+                  size="large"
+                  onClick={handleWithdraw}
+                  disabled={withdrawLoading || !writeableContract}
+                  sx={{
+                    py: 2,
+                    fontSize: "1.1rem",
+                    fontWeight: 600,
+                    borderRadius: "16px",
+                    backgroundColor: theme.palette.success.main,
+                    "&:hover": {
+                      backgroundColor: theme.palette.success.dark,
+                    },
+                  }}
+                >
+                  {withdrawLoading ? "Withdrawing..." : `Withdraw ${userData.withdrawable} ETH`}
+                </Button>
+              </Box>
+            )}
+
+            <Box sx={{ mt: 3, p: 2, backgroundColor: theme.palette.grey[50], borderRadius: 2 }}>
+              <Typography variant="body2" sx={{ color: theme.palette.text.secondary, textAlign: "center" }}>
+                💡 Tip: Once you withdraw, the ETH will be transferred back to your wallet immediately.
+              </Typography>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    </Box>
+  );
+};
+
+export default Withdraw;
