@@ -1,18 +1,6 @@
 "use client";
 
-import { 
-  Box, 
-  Button, 
-  TextField, 
-  Typography, 
-  Card, 
-  CardContent, 
-  InputAdornment,
-  Alert,
-  Chip,
-  Divider,
-  useTheme
-} from "@mui/material";
+import { Box, Button, TextField, Typography, Card, CardContent, InputAdornment, Alert, Chip, Divider, useTheme } from "@mui/material";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useCallback, useEffect, useState } from "react";
 import { useAccount, useBalance, useWalletClient } from "wagmi";
@@ -36,12 +24,6 @@ const Home = () => {
     address: address,
   });
 
-  useEffect(() => {
-    if (stakeContract && address) {
-      getStakedAmount();
-    }
-  }, [stakeContract, address]);
-
   /**
    * 获取质押数量
    */
@@ -60,12 +42,18 @@ const Home = () => {
     }
   }, [address, stakeContract]);
 
+  useEffect(() => {
+    if (stakeContract && address) {
+      getStakedAmount();
+    }
+  }, [stakeContract, address, getStakedAmount]);
+
   /**
    * 质押
    */
   const handleStake = async () => {
     if (!stakeContract || !address || !walletClient || !amount) return;
-    
+
     // 验证输入
     if (parseFloat(amount) <= 0) {
       toast.error("Please enter a valid amount");
@@ -81,16 +69,16 @@ const Home = () => {
     try {
       setLoading(true);
       toast.info("Initiating stake transaction...");
-      
+
       // 质押
       const tx = await stakeContract.write.depositETH([], { value: parseEther(amount) });
       toast.info("Transaction submitted, waiting for confirmation...");
-      
+
       // 等待交易确认
       const res = await waitForTransactionReceipt(walletClient, { hash: tx });
       console.log(res, "tx");
       toast.success("Stake successful! 🎉");
-      
+
       // 更新质押数量
       getStakedAmount();
       setAmount(""); // 清空输入框
@@ -111,132 +99,103 @@ const Home = () => {
   };
 
   return (
-    <Box 
-      sx={{ 
-        width: '100%', 
-        maxWidth: '1000px',
-        mx: 'auto',
+    <Box
+      sx={{
+        width: "100%",
+        maxWidth: "1000px",
+        mx: "auto",
       }}
     >
       {/* Hero Section */}
-      <Box 
+      <Box
         className="animate-fadeInUp"
-        sx={{ 
-          textAlign: 'center', 
+        sx={{
+          textAlign: "center",
           mb: 6,
           py: 4,
         }}
       >
-        <Typography 
-          variant="h1" 
-          sx={{ 
+        <Typography
+          variant="h1"
+          sx={{
             mb: 2,
-            fontSize: { xs: '2rem', md: '3rem' },
+            fontSize: { xs: "2rem", md: "3rem" },
           }}
         >
           RCC Stake
         </Typography>
-        <Typography 
-          variant="h6" 
-          sx={{ 
+        <Typography
+          variant="h6"
+          sx={{
             color: theme.palette.text.secondary,
             mb: 3,
-            fontSize: { xs: '1rem', md: '1.25rem' },
+            fontSize: { xs: "1rem", md: "1.25rem" },
           }}
         >
           Stake your ETH to earn rewards and participate in the RCC ecosystem
         </Typography>
-        
+
         {/* Features */}
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            gap: 2, 
-            flexWrap: 'wrap',
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 2,
+            flexWrap: "wrap",
             mb: 4,
           }}
         >
-          <Chip 
-            icon={<Security />} 
-            label="Secure Staking" 
-            color="primary" 
-            variant="outlined" 
-          />
-          <Chip 
-            icon={<ShowChart />} 
-            label="Earn Rewards" 
-            color="secondary" 
-            variant="outlined" 
-          />
-          <Chip 
-            icon={<AccountBalance />} 
-            label="DeFi Protocol" 
-            color="success" 
-            variant="outlined" 
-          />
+          <Chip icon={<Security />} label="Secure Staking" color="primary" variant="outlined" />
+          <Chip icon={<ShowChart />} label="Earn Rewards" color="secondary" variant="outlined" />
+          <Chip icon={<AccountBalance />} label="DeFi Protocol" color="success" variant="outlined" />
         </Box>
       </Box>
 
       {/* Stats Cards */}
       {isConnected && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3, mb: 4, width: '100%' }} className="animate-fadeInUp">
-          <StatsCard
-            title="Your Staked Amount"
-            value={`${parseFloat(stakedAmount).toFixed(4)} ETH`}
-            subtitle="Currently earning rewards"
-            icon="staked"
-            color="primary"
-            loading={dataLoading}
-          />
-          <StatsCard
-            title="Wallet Balance"
-            value={`${balance ? parseFloat(balance.formatted).toFixed(4) : '0'} ETH`}
-            subtitle="Available to stake"
-            icon="wallet"
-            color="secondary"
-            loading={!balance}
-          />
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3, mb: 4, width: "100%" }} className="animate-fadeInUp">
+          <StatsCard title="Your Staked Amount" value={`${parseFloat(stakedAmount).toFixed(4)} ETH`} subtitle="Currently earning rewards" icon="staked" color="primary" loading={dataLoading} />
+          <StatsCard title="Wallet Balance" value={`${balance ? parseFloat(balance.formatted).toFixed(4) : "0"} ETH`} subtitle="Available to stake" icon="wallet" color="secondary" loading={!balance} />
         </Box>
       )}
 
       {/* Main Staking Card */}
-      <Card 
+      <Card
         className="hover-lift animate-fadeInUp"
-        sx={{ 
-          background: 'rgba(255, 255, 255, 0.9)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          borderRadius: '24px',
-          overflow: 'hidden',
-          position: 'relative',
-          '&::before': {
+        sx={{
+          background: "rgba(255, 255, 255, 0.9)",
+          backdropFilter: "blur(20px)",
+          border: "1px solid rgba(255, 255, 255, 0.2)",
+          borderRadius: "24px",
+          overflow: "hidden",
+          position: "relative",
+          "&::before": {
             content: '""',
-            position: 'absolute',
+            position: "absolute",
             top: 0,
             left: 0,
             right: 0,
-            height: '4px',
-            background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)',
+            height: "4px",
+            background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
           },
         }}
       >
         <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontWeight: 600, 
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 600,
               mb: 1,
               color: theme.palette.text.primary,
             }}
           >
             Stake ETH
           </Typography>
-          <Typography 
-            variant="body1" 
-            sx={{ 
-              color: theme.palette.text.secondary, 
-              mb: 4 
+          <Typography
+            variant="body1"
+            sx={{
+              color: theme.palette.text.secondary,
+              mb: 4,
             }}
           >
             Start earning rewards by staking your ETH tokens
@@ -245,7 +204,7 @@ const Home = () => {
           <Divider sx={{ mb: 4 }} />
 
           {!isConnected ? (
-            <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Box sx={{ textAlign: "center", py: 4 }}>
               <Typography variant="h6" sx={{ mb: 3, color: theme.palette.text.secondary }}>
                 Connect your wallet to start staking
               </Typography>
@@ -253,17 +212,17 @@ const Home = () => {
             </Box>
           ) : (
             <Box>
-              <Typography 
-                variant="h6" 
-                sx={{ 
-                  fontWeight: 600, 
+              <Typography
+                variant="h6"
+                sx={{
+                  fontWeight: 600,
                   mb: 3,
                   color: theme.palette.text.primary,
                 }}
               >
                 Stake Amount
               </Typography>
-              
+
               <TextField
                 fullWidth
                 value={amount}
@@ -275,32 +234,30 @@ const Home = () => {
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <Button
                           size="small"
                           onClick={handleMaxClick}
                           sx={{
-                            minWidth: 'auto',
+                            minWidth: "auto",
                             px: 2,
                             py: 0.5,
-                            fontSize: '0.75rem',
+                            fontSize: "0.75rem",
                             fontWeight: 600,
                           }}
                         >
                           MAX
                         </Button>
-                        <Typography sx={{ fontWeight: 600, color: theme.palette.text.secondary }}>
-                          ETH
-                        </Typography>
+                        <Typography sx={{ fontWeight: 600, color: theme.palette.text.secondary }}>ETH</Typography>
                       </Box>
                     </InputAdornment>
                   ),
                 }}
                 sx={{
                   mb: 3,
-                  '& .MuiOutlinedInput-root': {
-                    fontSize: '1.1rem',
-                    '& input': {
+                  "& .MuiOutlinedInput-root": {
+                    fontSize: "1.1rem",
+                    "& input": {
                       py: 2,
                     },
                   },
@@ -308,14 +265,8 @@ const Home = () => {
               />
 
               {balance && amount && parseFloat(amount) > 0 && (
-                <Alert 
-                  severity={parseFloat(amount) > parseFloat(balance.formatted) ? "error" : "info"}
-                  sx={{ mb: 3 }}
-                >
-                  {parseFloat(amount) > parseFloat(balance.formatted) 
-                    ? "Insufficient balance" 
-                    : `You will stake ${amount} ETH from your balance of ${parseFloat(balance.formatted).toFixed(4)} ETH`
-                  }
+                <Alert severity={parseFloat(amount) > parseFloat(balance.formatted) ? "error" : "info"} sx={{ mb: 3 }}>
+                  {parseFloat(amount) > parseFloat(balance.formatted) ? "Insufficient balance" : `You will stake ${amount} ETH from your balance of ${parseFloat(balance.formatted).toFixed(4)} ETH`}
                 </Alert>
               )}
 
@@ -327,17 +278,17 @@ const Home = () => {
                 disabled={loading || !amount || parseFloat(amount) <= 0}
                 sx={{
                   py: 2,
-                  fontSize: '1.1rem',
+                  fontSize: "1.1rem",
                   fontWeight: 600,
-                  borderRadius: '16px',
+                  borderRadius: "16px",
                 }}
               >
                 {loading ? "Staking..." : "Stake ETH"}
               </Button>
 
               <Box sx={{ mt: 3, p: 2, backgroundColor: theme.palette.grey[50], borderRadius: 2 }}>
-                <Typography variant="body2" sx={{ color: theme.palette.text.secondary, textAlign: 'center' }}>
-                  💡 Tip: You can withdraw your staked ETH anytime, but there's a 20-minute waiting period after unstaking.
+                <Typography variant="body2" sx={{ color: theme.palette.text.secondary, textAlign: "center" }}>
+                  💡 {`Tip: You can withdraw your staked ETH anytime, but there's a 20-minute waiting period after unstaking.`}
                 </Typography>
               </Box>
             </Box>
