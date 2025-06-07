@@ -20,11 +20,7 @@ const Home = () => {
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const { data: walletClient } = useWalletClient();
-  const {
-    data: balance,
-    isRefetching: isBalanceRefetching,
-    refetch: refetchBalance,
-  } = useBalance({
+  const { data: balance, refetch: refetchBalance } = useBalance({
     address: address,
   });
 
@@ -160,7 +156,7 @@ const Home = () => {
       {isConnected && (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3, mb: 4, width: "100%" }} className="animate-fadeInUp">
           <StatsCard title="Your Staked Amount" value={`${parseFloat(stakedAmount).toFixed(4)} ETH`} subtitle="Currently earning rewards" icon="staked" color="primary" loading={dataLoading} />
-          <StatsCard title="Wallet Balance" value={`${balance ? parseFloat(balance.formatted).toFixed(4) : "0"} ETH`} subtitle="Available to stake" icon="wallet" color="secondary" loading={!balance || isBalanceRefetching} />
+          <StatsCard title="Wallet Balance" value={`${balance ? parseFloat(balance.formatted).toFixed(4) : "0"} ETH`} subtitle="Available to stake" icon="wallet" color="secondary" loading={!balance} />
         </Box>
       )}
 
