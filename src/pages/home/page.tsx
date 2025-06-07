@@ -3,8 +3,8 @@
 import { Box, Button, TextField, Typography, Card, CardContent, InputAdornment, Alert, Chip, Divider, useTheme } from "@mui/material";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useEffect, useState } from "react";
-import { useAccount, useBalance, useWaitForTransactionReceipt } from "wagmi";
-import { useStakeContract, useStakingBalance } from "../../hooks/useContract";
+import { useAccount, useBalance } from "wagmi";
+import { useDepositETH, useStakingBalance } from "../../hooks/useContract";
 import { formatEther, parseEther } from "viem";
 import { toast } from "react-toastify";
 import StatsCard from "../../components/StatsCard";
@@ -23,21 +23,16 @@ const Home = () => {
   const { data: stakedAmountRaw, isLoading: dataLoading, refetch: refetchStakedAmount } = useStakingBalance(BigInt(0), address);
   const stakedAmount = stakedAmountRaw ? formatEther(stakedAmountRaw) : "0";
 
-  const { write, data: hash, isPending } = useStakeContract();
-
-  // 等待交易确认
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
-  });
+  const depositETH = useDepositETH();
 
   // 当交易确认后，刷新数据
   useEffect(() => {
-    if (isConfirmed) {
+    if (depositETH.receipt.isSuccess) {
       refetchStakedAmount();
       setAmount("");
       toast.success("Stake successful! 🎉");
     }
-  }, [isConfirmed, refetchStakedAmount]);
+  }, [depositETH.receipt.isSuccess, refetchStakedAmount]);
 
   /**
    * 质押
@@ -61,7 +56,7 @@ const Home = () => {
       toast.info("Initiating stake transaction...");
 
       // 质押
-      write.depositETH(parseEther(amount));
+      depositETH.write(parseEther(amount));
       toast.info("Transaction submitted, waiting for confirmation...");
     } catch (error: any) {
       console.error("Failed to stake", error);
@@ -77,7 +72,7 @@ const Home = () => {
     }
   };
 
-  const loading = isPending || isConfirming;
+  const loading = depositETH.writeRest.isPending || depositETH.receipt.isLoading;
 
   return (
     <Box

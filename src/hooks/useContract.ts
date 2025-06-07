@@ -1,37 +1,62 @@
-import { useReadContract, useWriteContract } from "wagmi";
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { StakeContractAddress } from "../utils/env";
 import { stakeAbi } from "../assets/abis/stake";
 
-export const useStakeContract = () => {
+// 质押
+export const useDepositETH = () => {
   const { writeContract, ...writeRest } = useWriteContract();
-
+  const receipt = useWaitForTransactionReceipt({
+    hash: writeRest.data,
+  });
   return {
-    // 写入方法
-    write: {
-      depositETH: (value: bigint) =>
-        writeContract({
-          address: StakeContractAddress,
-          abi: stakeAbi,
-          functionName: "depositETH",
-          args: [],
-          value,
-        }),
-      unstake: (args: readonly [bigint, bigint]) =>
-        writeContract({
-          address: StakeContractAddress,
-          abi: stakeAbi,
-          functionName: "unstake",
-          args,
-        }),
-      withdraw: (args: readonly [bigint]) =>
-        writeContract({
-          address: StakeContractAddress,
-          abi: stakeAbi,
-          functionName: "withdraw",
-          args,
-        }),
-    },
-    ...writeRest,
+    write: (value: bigint) =>
+      writeContract({
+        address: StakeContractAddress,
+        abi: stakeAbi,
+        functionName: "depositETH",
+        args: [],
+        value,
+      }),
+    writeRest,
+    receipt,
+  };
+};
+
+// 解质押
+export const useUnStake = () => {
+  const { writeContract, ...writeRest } = useWriteContract();
+  const receipt = useWaitForTransactionReceipt({
+    hash: writeRest.data,
+  });
+  return {
+    write: (args: readonly [bigint, bigint]) =>
+      writeContract({
+        address: StakeContractAddress,
+        abi: stakeAbi,
+        functionName: "unstake",
+        args,
+      }),
+    writeRest,
+    receipt,
+  };
+};
+
+// 提现
+export const useWithdraw = () => {
+  const { writeContract, ...writeRest } = useWriteContract();
+  const receipt = useWaitForTransactionReceipt({
+    hash: writeRest.data,
+  });
+  return {
+    write: (args: readonly [bigint]) =>
+      writeContract({
+        address: StakeContractAddress,
+        abi: stakeAbi,
+        functionName: "withdraw",
+        args,
+      }),
+    writeRest,
+    receipt,
   };
 };
 

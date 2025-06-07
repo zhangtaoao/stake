@@ -3,8 +3,8 @@
 import { Box, Button, TextField, Typography, Card, CardContent, InputAdornment, Alert, Chip, Divider, useTheme, Stepper, Step, StepLabel } from "@mui/material";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useEffect, useMemo, useState } from "react";
-import { useAccount, useWaitForTransactionReceipt } from "wagmi";
-import { useStakeContract, useStakingBalance, useWithdrawAmount } from "../../hooks/useContract";
+import { useAccount } from "wagmi";
+import { useUnStake, useWithdraw, useStakingBalance, useWithdrawAmount } from "../../hooks/useContract";
 import { formatEther, parseEther } from "viem";
 import { toast } from "react-toastify";
 import StatsCard from "../../components/StatsCard";
@@ -21,15 +21,11 @@ const Withdraw = () => {
   const { address, isConnected } = useAccount();
   const [amount, setAmount] = useState("");
 
-  const { write, data: hash, isPending } = useStakeContract();
+  const unStake = useUnStake();
+  const withdraw = useWithdraw();
 
-  // 等待交易确认
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
-  });
-
-  const { data: stakedAmountRaw, isLoading: stakedLoading, refetch: refetchStaked } = useStakingBalance(BigInt(0), address);
-  const { data: withdrawAmountRaw, isLoading: withdrawLoading, refetch: refetchWithdraw } = useWithdrawAmount(BigInt(0), address);
+  const { data: stakedAmountRaw, isLoading: stakedDataLoading, refetch: refetchStaked } = useStakingBalance(BigInt(0), address);
+  const { data: withdrawAmountRaw, isLoading: withdrawDataLoading, refetch: refetchWithdraw } = useWithdrawAmount(BigInt(0), address);
 
   const userData = useMemo(() => {
     if (!stakedAmountRaw || !withdrawAmountRaw) {
@@ -40,7 +36,6 @@ const Withdraw = () => {
       };
     }
 
-    // withdrawAmountRaw 应该返回 [requestAmount, pendingWithdrawAmount]
     const [requestAmount, pendingWithdrawAmount] = withdrawAmountRaw as [bigint, bigint];
     const ava = Number(formatEther(pendingWithdrawAmount));
     const p = Number(formatEther(requestAmount));
@@ -52,17 +47,17 @@ const Withdraw = () => {
     };
   }, [stakedAmountRaw, withdrawAmountRaw]);
 
-  const dataLoading = stakedLoading || withdrawLoading;
+  const dataLoading = stakedDataLoading || withdrawDataLoading;
 
   // 当交易确认后，刷新数据
   useEffect(() => {
-    if (isConfirmed) {
+    if (unStake.receipt.isSuccess || withdraw.receipt.isSuccess) {
       refetchStaked();
       refetchWithdraw();
       setAmount("");
       toast.success("Transaction successful! 🎉");
     }
-  }, [isConfirmed, refetchStaked, refetchWithdraw]);
+  }, [unStake.receipt.isSuccess, withdraw.receipt.isSuccess, refetchStaked, refetchWithdraw]);
 
   // 是否可提现
   const isWithdrawable = useMemo(() => {
@@ -82,7 +77,7 @@ const Withdraw = () => {
     try {
       toast.info("Initiating withdrawal...");
 
-      write.withdraw([BigInt(0)]);
+      withdraw.write([BigInt(0)]);
       toast.info("Transaction submitted, waiting for confirmation...");
     } catch (error: any) {
       console.error("Failed to withdraw", error);
@@ -110,7 +105,7 @@ const Withdraw = () => {
     try {
       toast.info("Initiating unstake...");
 
-      write.unstake([BigInt(0), parseEther(amount)]);
+      unStake.write([BigInt(0), parseEther(amount)]);
       toast.info("Transaction submitted, waiting for confirmation...");
     } catch (error: any) {
       console.error("Failed to unstake", error);
@@ -132,7 +127,8 @@ const Withdraw = () => {
     return 1;
   };
 
-  const loading = isPending || isConfirming;
+  const unStakeLoading = unStake.writeRest.isPending || unStake.receipt.isLoading;
+  const withdrawLoading = withdraw.writeRest.isPending || withdraw.receipt.isLoading;
 
   return (
     <Box
@@ -317,7 +313,7 @@ const Withdraw = () => {
                     variant="contained"
                     size="large"
                     onClick={handleUnStake}
-                    disabled={loading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > parseFloat(userData.staked)}
+                    disabled={unStakeLoading || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > parseFloat(userData.staked)}
                     sx={{
                       py: 2,
                       fontSize: "1.1rem",
@@ -329,7 +325,7 @@ const Withdraw = () => {
                       },
                     }}
                   >
-                    {loading ? "Unstaking..." : "Unstake ETH"}
+                    {unStakeLoading ? "Unstaking..." : "Unstake ETH"}
                   </Button>
                 </Box>
               )}
@@ -389,7 +385,7 @@ const Withdraw = () => {
                 fullWidth
                 variant="contained"
                 size="large"
-                disabled={!isWithdrawable}
+                disabled={!isWithdrawable || withdrawLoading}
                 onClick={handleWithdraw}
                 sx={{
                   py: 2,
@@ -402,7 +398,7 @@ const Withdraw = () => {
                   },
                 }}
               >
-                {loading ? "Withdrawing..." : isWithdrawable ? "Withdraw ETH" : "No funds available"}
+                {withdrawLoading ? "Withdrawing..." : isWithdrawable ? "Withdraw ETH" : "No funds available"}
               </Button>
 
               <Box sx={{ mt: 3, p: 2, backgroundColor: theme.palette.grey[50], borderRadius: 2 }}>
