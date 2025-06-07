@@ -2,11 +2,10 @@
 
 import { Box, Button, TextField, Typography, Card, CardContent, InputAdornment, Alert, Chip, Divider, useTheme, Stepper, Step, StepLabel } from "@mui/material";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAccount, useBalance, useWalletClient } from "wagmi";
-import { useStakeContract } from "../../hooks/useContract";
+import { useEffect, useMemo, useState } from "react";
+import { useAccount, useWaitForTransactionReceipt } from "wagmi";
+import { useStakeContract, useStakingBalance, useWithdrawAmount } from "../../hooks/useContract";
 import { formatEther, parseEther } from "viem";
-import { waitForTransactionReceipt } from "viem/actions";
 import { toast } from "react-toastify";
 import StatsCard from "../../components/StatsCard";
 import { CheckCircle, TrendingDown, AccessTime, Warning } from "@mui/icons-material";
@@ -17,22 +16,53 @@ export type UserStakeData = {
   withdrawPending: string;
 };
 
-const _userData = {
-  staked: "0",
-  withdrawable: "0",
-  withdrawPending: "0",
-};
-
 const Withdraw = () => {
   const theme = useTheme();
-  const stakeContract = useStakeContract();
   const { address, isConnected } = useAccount();
-  const [loading, setLoading] = useState(false);
-  const [withdrawLoading, setWithdrawLoading] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
   const [amount, setAmount] = useState("");
-  const [userData, setUserData] = useState<UserStakeData>(_userData);
-  const { data: walletClient } = useWalletClient();
+
+  const { write, data: hash, isPending } = useStakeContract();
+
+  // 等待交易确认
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  const { data: stakedAmountRaw, isLoading: stakedLoading, refetch: refetchStaked } = useStakingBalance(BigInt(0), address);
+  const { data: withdrawAmountRaw, isLoading: withdrawLoading, refetch: refetchWithdraw } = useWithdrawAmount(BigInt(0), address);
+
+  const userData = useMemo(() => {
+    if (!stakedAmountRaw || !withdrawAmountRaw) {
+      return {
+        staked: "0",
+        withdrawable: "0",
+        withdrawPending: "0",
+      };
+    }
+
+    // withdrawAmountRaw 应该返回 [requestAmount, pendingWithdrawAmount]
+    const [requestAmount, pendingWithdrawAmount] = withdrawAmountRaw as [bigint, bigint];
+    const ava = Number(formatEther(pendingWithdrawAmount));
+    const p = Number(formatEther(requestAmount));
+
+    return {
+      staked: formatEther(stakedAmountRaw),
+      withdrawPending: (p - ava).toFixed(4),
+      withdrawable: ava.toString(),
+    };
+  }, [stakedAmountRaw, withdrawAmountRaw]);
+
+  const dataLoading = stakedLoading || withdrawLoading;
+
+  // 当交易确认后，刷新数据
+  useEffect(() => {
+    if (isConfirmed) {
+      refetchStaked();
+      refetchWithdraw();
+      setAmount("");
+      toast.success("Transaction successful! 🎉");
+    }
+  }, [isConfirmed, refetchStaked, refetchWithdraw]);
 
   // 是否可提现
   const isWithdrawable = useMemo(() => {
@@ -45,57 +75,18 @@ const Withdraw = () => {
   }, [userData.staked]);
 
   /**
-   * 获取用户质押数据
-   */
-  const getUserStakeData = useCallback(async () => {
-    if (!stakeContract || !address) return;
-
-    try {
-      setDataLoading(true);
-      const staked = await stakeContract.read.stakingBalance([0, address]);
-      //@ts-ignore
-      const [requestAmount, pendingWithdrawAmount] = await stakeContract.read.withdrawAmount([0, address]);
-      const ava = Number(formatEther(pendingWithdrawAmount as bigint));
-      const p = Number(formatEther(requestAmount as bigint));
-      setUserData({
-        staked: formatEther(staked as bigint),
-        withdrawPending: (p - ava).toFixed(4),
-        withdrawable: ava.toString(),
-      });
-    } catch (error) {
-      console.error("Failed to get stake data", error);
-    } finally {
-      setDataLoading(false);
-    }
-  }, [stakeContract, address]);
-
-  useEffect(() => {
-    if (stakeContract && address) {
-      getUserStakeData();
-    }
-  }, [stakeContract, address, getUserStakeData]);
-
-  /**
    * 提现
    */
   const handleWithdraw = async () => {
-    if (!stakeContract || !address || !walletClient) return;
+    if (!address) return;
     try {
-      setWithdrawLoading(true);
       toast.info("Initiating withdrawal...");
 
-      const tx = await stakeContract.write.withdraw([0]);
+      write.withdraw([BigInt(0)]);
       toast.info("Transaction submitted, waiting for confirmation...");
-
-      const res = await waitForTransactionReceipt(walletClient, { hash: tx });
-      console.log(res, "tx");
-      toast.success("Withdrawal successful! 🎉");
-      getUserStakeData();
     } catch (error: any) {
       console.error("Failed to withdraw", error);
       toast.error(error?.shortMessage || "Failed to withdraw");
-    } finally {
-      setWithdrawLoading(false);
     }
   };
 
@@ -103,7 +94,7 @@ const Withdraw = () => {
    * 解质押
    */
   const handleUnStake = async () => {
-    if (!stakeContract || !address || !walletClient || !amount) return;
+    if (!address || !amount) return;
 
     // 验证输入
     if (parseFloat(amount) <= 0) {
@@ -117,22 +108,13 @@ const Withdraw = () => {
     }
 
     try {
-      setLoading(true);
       toast.info("Initiating unstake...");
 
-      const tx = await stakeContract.write.unstake([0, parseEther(amount)]);
+      write.unstake([BigInt(0), parseEther(amount)]);
       toast.info("Transaction submitted, waiting for confirmation...");
-
-      const res = await waitForTransactionReceipt(walletClient, { hash: tx });
-      console.log(res, "tx");
-      toast.success("Unstake successful! ⏰ 20 minutes waiting period started");
-      getUserStakeData();
-      setAmount(""); // 清空输入框
     } catch (error: any) {
       console.error("Failed to unstake", error);
       toast.error(error?.shortMessage || "Failed to unstake");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -149,6 +131,8 @@ const Withdraw = () => {
     if (Number(userData.withdrawable) > 0) return 3;
     return 1;
   };
+
+  const loading = isPending || isConfirming;
 
   return (
     <Box
@@ -418,7 +402,7 @@ const Withdraw = () => {
                   },
                 }}
               >
-                {withdrawLoading ? "Withdrawing..." : isWithdrawable ? "Withdraw ETH" : "No funds available"}
+                {loading ? "Withdrawing..." : isWithdrawable ? "Withdraw ETH" : "No funds available"}
               </Button>
 
               <Box sx={{ mt: 3, p: 2, backgroundColor: theme.palette.grey[50], borderRadius: 2 }}>

@@ -2,57 +2,48 @@
 
 import { Box, Button, TextField, Typography, Card, CardContent, InputAdornment, Alert, Chip, Divider, useTheme } from "@mui/material";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useCallback, useEffect, useState } from "react";
-import { useAccount, useBalance, useWalletClient } from "wagmi";
-import { useStakeContract } from "../../hooks/useContract";
+import { useEffect, useState } from "react";
+import { useAccount, useBalance, useWaitForTransactionReceipt } from "wagmi";
+import { useStakeContract, useStakingBalance } from "../../hooks/useContract";
 import { formatEther, parseEther } from "viem";
-import { waitForTransactionReceipt } from "viem/actions";
 import { toast } from "react-toastify";
 import StatsCard from "../../components/StatsCard";
 import { AccountBalance, ShowChart, Security } from "@mui/icons-material";
 
 const Home = () => {
   const theme = useTheme();
-  const stakeContract = useStakeContract();
   const { address, isConnected } = useAccount();
-  const [stakedAmount, setStakedAmount] = useState("0");
   const [amount, setAmount] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true);
-  const { data: walletClient } = useWalletClient();
+
   const { data: balance } = useBalance({
     address: address,
   });
 
-  /**
-   * 获取质押数量
-   */
-  const getStakedAmount = useCallback(async () => {
-    if (address && stakeContract) {
-      try {
-        setDataLoading(true);
-        const res = await stakeContract?.read.stakingBalance([0, address]);
-        setStakedAmount(formatEther(res as bigint));
-        console.log("stakedAmount", res);
-      } catch (error) {
-        console.error("Failed to get staked amount", error);
-      } finally {
-        setDataLoading(false);
-      }
-    }
-  }, [address, stakeContract]);
+  // 获取质押余额
+  const { data: stakedAmountRaw, isLoading: dataLoading, refetch: refetchStakedAmount } = useStakingBalance(BigInt(0), address);
+  const stakedAmount = stakedAmountRaw ? formatEther(stakedAmountRaw) : "0";
 
+  const { write, data: hash, isPending } = useStakeContract();
+
+  // 等待交易确认
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+    hash,
+  });
+
+  // 当交易确认后，刷新数据
   useEffect(() => {
-    if (stakeContract && address) {
-      getStakedAmount();
+    if (isConfirmed) {
+      refetchStakedAmount();
+      setAmount("");
+      toast.success("Stake successful! 🎉");
     }
-  }, [stakeContract, address, getStakedAmount]);
+  }, [isConfirmed, refetchStakedAmount]);
 
   /**
    * 质押
    */
   const handleStake = async () => {
-    if (!stakeContract || !address || !walletClient || !amount) return;
+    if (!address || !amount) return;
 
     // 验证输入
     if (parseFloat(amount) <= 0) {
@@ -67,26 +58,14 @@ const Home = () => {
     }
 
     try {
-      setLoading(true);
       toast.info("Initiating stake transaction...");
 
       // 质押
-      const tx = await stakeContract.write.depositETH([], { value: parseEther(amount) });
+      write.depositETH(parseEther(amount));
       toast.info("Transaction submitted, waiting for confirmation...");
-
-      // 等待交易确认
-      const res = await waitForTransactionReceipt(walletClient, { hash: tx });
-      console.log(res, "tx");
-      toast.success("Stake successful! 🎉");
-
-      // 更新质押数量
-      getStakedAmount();
-      setAmount(""); // 清空输入框
     } catch (error: any) {
       console.error("Failed to stake", error);
       toast.error(error?.shortMessage || "Failed to stake");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -97,6 +76,8 @@ const Home = () => {
       setAmount(maxAmount.toString());
     }
   };
+
+  const loading = isPending || isConfirming;
 
   return (
     <Box
