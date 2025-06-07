@@ -20,7 +20,7 @@ const Home = () => {
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const { data: walletClient } = useWalletClient();
-  const { data: balance } = useBalance({
+  const { data: balance, refetch: refetchBalance } = useBalance({
     address: address,
   });
 
@@ -77,6 +77,7 @@ const Home = () => {
       // 等待交易确认
       const res = await waitForTransactionReceipt(walletClient, { hash: tx });
       console.log(res, "tx");
+      refetchBalance();
       toast.success("Stake successful! 🎉");
 
       // 更新质押数量
